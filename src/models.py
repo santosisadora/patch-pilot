@@ -10,3 +10,6 @@ class Finding:
     severity: str
     asset: str
     source: str = "trivy"
+    in_kev: bool = False
+    epss: float = 0.0
+    epss_percentile: float = 0.0

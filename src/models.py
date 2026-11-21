@@ -13,3 +13,5 @@ class Finding:
     in_kev: bool = False
     epss: float = 0.0
     epss_percentile: float = 0.0
+    priority: str = "P3"
+    reason: str = ""

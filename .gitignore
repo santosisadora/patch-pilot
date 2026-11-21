@@ -5,3 +5,4 @@ data/kev.json
 data/scan*.json
 data/*.db
 data/pr_*.md
+data/*.csv

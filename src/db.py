@@ -26,6 +26,19 @@ CREATE TABLE IF NOT EXISTS findings (
     resolved_at TEXT,
     UNIQUE(asset, cve_id, package)
 );
+
+CREATE TABLE IF NOT EXISTS runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    repos_total INTEGER,
+    repos_ok INTEGER,
+    open_total INTEGER,
+    new_count INTEGER,
+    resolved_count INTEGER,
+    notes TEXT
+);
 """
 
 def connect() -> sqlite3.Connection:
@@ -34,7 +47,7 @@ def connect() -> sqlite3.Connection:
     conn.executescript(SCHEMA)
     return conn
 
-def upsert_scan(conn, findings: list[Finding], scan_date: str) -> None:
+def upsert_scan(conn, findings: list[Finding], scan_date: str, assets: set[str] | None = None) -> None:
     seen = set()
     for f in findings:
         seen.add((f.asset, f.cve_id, f.package))
@@ -55,7 +68,7 @@ def upsert_scan(conn, findings: list[Finding], scan_date: str) -> None:
         """, (f.asset, f.cve_id, f.package, f.installed_version, f.fixed_version,
               f.severity, f.priority, f.reason, int(f.in_kev), f.epss, scan_date, scan_date))
     # anything open for these assets that is missing from this scan is considered fixed
-    for asset in {f.asset for f in findings}:
+    for asset in (assets if assets is not None else {f.asset for f in findings}):
         rows = conn.execute(
             "SELECT id, cve_id, package FROM findings WHERE asset=? AND resolved_at IS NULL", (asset,)
         ).fetchall()

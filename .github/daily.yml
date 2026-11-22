@@ -1,0 +1,81 @@
+name: daily-scan
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: daily-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+
+      - name: Restore saved history
+        shell: bash
+        run: |
+          mkdir -p data
+          set +e
+          git ls-remote --exit-code --heads origin state > /dev/null 2>&1
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            git fetch --depth=1 origin state
+            git show FETCH_HEAD:patchpilot.db > data/patchpilot.db
+            echo "Restored history."
+          elif [ "$code" -eq 2 ]; then
+            echo "No saved history yet; starting fresh."
+          else
+            echo "Could not check for saved history (exit $code)."
+            exit 1
+          fi
+
+      - name: Scan repositories
+        id: scan
+        continue-on-error: true
+        run: python src/scan_repos.py
+
+      - name: Build status page
+        run: python src/site.py
+
+      - name: Save history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tmp=$(mktemp -d)
+          cp data/patchpilot.db "$tmp/patchpilot.db"
+          cd "$tmp"
+          git init -q -b state
+          git config user.name "patchpilot-bot"
+          git config user.email "patchpilot-bot@users.noreply.github.com"
+          git add patchpilot.db
+          git commit -q -m "state $(date -u +%F)"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" state
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Fail the job if the scan failed
+        if: steps.scan.outcome == 'failure'
+        run: exit 1

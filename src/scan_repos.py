@@ -16,7 +16,8 @@ from prioritize import prioritize
 
 def sh(cmd: list[str], timeout: int) -> str:
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       timeout=timeout, env=env)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip()[-300:] or f"exit code {r.returncode}")
     return r.stdout
@@ -40,10 +41,12 @@ def scan_repo(repo: str) -> list[Finding]:
     try:
         dest = os.path.join(tmp, "src")
         sh(["git", "clone", "--depth", "1", "--quiet", f"https://github.com/{repo}.git", dest], timeout=300)
-        return parse_trivy(run_trivy(dest), asset=repo)
+        data = run_trivy(dest)
+        if not data.get("Results"):
+            raise RuntimeError("no supported dependency files found (is there a lockfile?)")
+        return parse_trivy(data, asset=repo)
     finally:
         shutil.rmtree(tmp, onerror=_force_remove)
-
 def read_repos(path: str) -> list[str]:
     with open(path, encoding="utf-8") as f:
         return [l.strip() for l in f if l.strip() and not l.startswith("#")]

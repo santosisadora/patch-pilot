@@ -1,12 +1,10 @@
 import json
 from models import Finding
 
-def load_trivy(path: str) -> list[Finding]:
-    with open(path) as f:
-        data = json.load(f)
-    asset = data.get("ArtifactName", "unknown")
+def parse_trivy(data: dict, asset: str | None = None) -> list[Finding]:
+    asset = asset or data.get("ArtifactName", "unknown")
     findings = []
-    for result in data.get("Results", []):
+    for result in data.get("Results") or []:
         for v in result.get("Vulnerabilities") or []:
             findings.append(Finding(
                 cve_id=v["VulnerabilityID"],
@@ -18,14 +16,14 @@ def load_trivy(path: str) -> list[Finding]:
             ))
     return findings
 
+def load_trivy(path: str) -> list[Finding]:
+    with open(path, encoding="utf-8") as f:
+        return parse_trivy(json.load(f))
+
 if __name__ == "__main__":
     fs = load_trivy("data/scan.json")
     print(f"{len(fs)} findings")
-    no_fix = sum(1 for f in fs if not f.fixed_version)
-    print(f"{no_fix} with no fixed version")
     counts = {}
     for f in fs:
         counts[f.severity] = counts.get(f.severity, 0) + 1
     print(counts)
-    for f in fs[:5]:
-        print(f)
